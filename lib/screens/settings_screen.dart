@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
-import '../utils/constants.dart'; // Merkezi sabitler eklendi
+import '../utils/constants.dart'; // Merkezi sabitler
 import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -38,10 +38,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (phone.isEmpty) return;
 
     try {
-      // ApiConstants.baseUrl kullanımı
       final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/user-profile/?phone=$phone'));
 
       if (response.statusCode == 200) {
+        // UTF-8 decoding eklendi
         final data = json.decode(utf8.decode(response.bodyBytes));
 
         if (mounted) {
@@ -53,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } catch (e) {
-      print("Ayarlar veri çekme hatası: $e");
+      debugPrint("Ayarlar veri çekme hatası: $e");
     }
   }
 
@@ -74,10 +74,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (response.statusCode == 200) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('userName', "${_nameController.text} ${_surnameController.text}");
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profil Güncellendi ✅")));
+        if(mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profil Güncellendi ✅"), backgroundColor: Colors.green));
+        }
+      } else {
+        if(mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Güncelleme başarısız."), backgroundColor: Colors.red));
+        }
       }
     } catch (e) {
-      print("Profil güncelleme hatası: $e");
+      debugPrint("Profil güncelleme hatası: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -96,7 +102,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
       if (response.statusCode == 200) {
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Şifre başarıyla değişti ✅"), backgroundColor: Colors.green));
+        if(mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Şifre başarıyla değişti ✅"), backgroundColor: Colors.green));
+        }
         _oldPassController.clear();
         _newPassController.clear();
       } else {
@@ -106,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } catch (e) {
-      print("Şifre değiştirme hatası: $e");
+      debugPrint("Şifre değiştirme hatası: $e");
     }
   }
 
@@ -150,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _launchWeb() async {
-    final Uri url = Uri.parse('https://ubasoft.com.tr'); // URL güncellendi
+    final Uri url = Uri.parse('https://ubasoft.com.tr');
     if (!await launchUrl(url)) throw 'Açılamadı';
   }
 

@@ -2,24 +2,31 @@ name: hemo_app
 description: "Hemo Kan Bağış Platformu"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
-  sdk: ^3.10.4
+  sdk: '>=3.10.4 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
 
+  # --- UI & GÖRSEL ---
   cupertino_icons: ^1.0.8
+  # Sözleşme metinlerindeki **kalın** ve satır başlarını düzeltmek için:
+  flutter_markdown: ^0.6.14
+
+  # --- AĞ & BAĞLANTI ---
   http: ^1.1.0
-  shared_preferences: ^2.2.2
   url_launcher: ^6.3.2
   share_plus: ^12.0.1
+
+  # --- YEREL DEPOLAMA & DOSYA ---
+  shared_preferences: ^2.2.2
   path_provider: ^2.1.5
   image_picker: ^1.2.1
 
-  # --- FİREBASE & BİLDİRİM PAKETLERİ ---
+  # --- FIREBASE & BİLDİRİM SİSTEMİ ---
   firebase_core: ^3.15.2
   firebase_messaging: ^15.2.10
   flutter_local_notifications: ^19.5.0
@@ -27,23 +34,29 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^4.0.0
 
   # --- İKON OLUŞTURUCU ---
   flutter_launcher_icons: ^0.13.1
 
-# İKON AYARLARI
+# --- UYGULAMA İKON AYARLARI ---
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/images/app_logo.png"
   min_sdk_android: 21
+
+  # Android için arka plan (Zaten vardı)
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/images/app_logo.png"
+
+  # --- iOS SİYAH ARKA PLAN SORUNU İÇİN EKLENEN KISIM ---
+  remove_alpha_ios: true        # iOS ikonundaki şeffaflığı kaldırır
+  background_color_ios: "#FFFFFF" # Şeffaf yerleri BEYAZ renge boyar
 
 flutter:
   uses-material-design: true
 
-  # ASSETS KISMINA LOGONU EKLEMEYİ UNUTMA
+  # --- DOSYA YOLU AYARLARI ---
   assets:
-    - assets/images/app_logo.png
+    - assets/images/

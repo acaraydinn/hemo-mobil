@@ -3,7 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import '../utils/constants.dart'; // Merkezi sabitler eklendi
+import 'package:image_picker/image_picker.dart'; // Resim seçmek için
+import 'package:path_provider/path_provider.dart'; // Resmi kaydetmek için
+import 'package:flutter_markdown/flutter_markdown.dart'; // EKLENDİ: Metinleri düzeltmek için
+
+import '../utils/constants.dart';
 import '../utils/gamification_helper.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
@@ -21,7 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   String userName = "Yükleniyor...";
   String userPhone = "";
   int userPoints = 0;
-  File? _profileImage;
+  File? _profileImage; // Ekranda gösterilecek yerel dosya
 
   List<dynamic> activeAds = [];
   List<dynamic> pastAds = [];
@@ -35,14 +39,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     _loadLocalData();
   }
 
+  // --- YEREL VERİ VE RESİM YÜKLEME ---
   Future<void> _loadLocalData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       userPhone = prefs.getString('userPhone') ?? "";
       userName = prefs.getString('userName') ?? "Kullanıcı";
-      String? savedImagePath = prefs.getString('profileImagePath');
-      if (savedImagePath != null && File(savedImagePath).existsSync()) {
-        _profileImage = File(savedImagePath);
+
+      // Kaydedilmiş resim yolunu kontrol et
+      String? savedImagePath = prefs.getString('profile_image_path');
+      if (savedImagePath != null) {
+        final File imageFile = File(savedImagePath);
+        if (imageFile.existsSync()) {
+          _profileImage = imageFile;
+        }
       }
     });
 
@@ -53,11 +63,46 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     }
   }
 
-  // --- API İŞLEMLERİ (MERKEZİ YAPIYA BAĞLANDI) ---
+  // --- PROFİL FOTOĞRAFI SEÇME VE KAYDETME ---
+  Future<void> _pickAndSaveImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      // Galeriyi aç
+      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile == null) return; // Seçim yapılmadıysa çık
+
+      // Uygulamanın kalıcı belge dizinini bul
+      final Directory appDir = await getApplicationDocumentsDirectory();
+      final String fileName = 'profile_photo.jpg'; // Sabit isim (her seferinde üzerine yazar)
+      final String newPath = '${appDir.path}/$fileName';
+
+      // Geçici dosyayı kalıcı yere kopyala
+      final File localFile = await File(pickedFile.path).copy(newPath);
+
+      // Yolu hafızaya kaydet
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image_path', newPath);
+
+      // Ekranda güncelle
+      setState(() {
+        _profileImage = localFile;
+      });
+
+      _showSnackBar("Profil fotoğrafı güncellendi!", Colors.green);
+    } catch (e) {
+      _showSnackBar("Fotoğraf yüklenirken hata oluştu.", Colors.red);
+      print("Resim hatası: $e");
+    }
+  }
+
+  // --- API İŞLEMLERİ ---
 
   Future<void> _refreshUserDataFromApi() async {
     try {
-      final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/user-profile/?phone=$userPhone'));
+      // ApiConstants.userProfile fonksiyonunu kullandık
+      final response = await http.get(Uri.parse(ApiConstants.userProfile(userPhone)));
+
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
         if (mounted) {
@@ -75,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   Future<void> _fetchMyAds() async {
     try {
-      final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/my-requests/?phone=$userPhone'));
+      final response = await http.get(Uri.parse('${ApiConstants.myRequests}?phone=$userPhone'));
       if (response.statusCode == 200) {
         final List<dynamic> allAds = json.decode(utf8.decode(response.bodyBytes));
         if (mounted) {
@@ -91,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   Future<void> _fetchMyDonations() async {
     try {
-      final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/my-donations/?phone=$userPhone'));
+      final response = await http.get(Uri.parse('${ApiConstants.myDonations}?phone=$userPhone'));
       if (response.statusCode == 200) {
         if (mounted) {
           setState(() {
@@ -102,7 +147,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     } catch (e) { print("Bağış API hatası: $e"); }
   }
 
-  // --- HUKUKİ METİN ÇEKME ---
+  // --- HUKUKİ METİN ÇEKME (DÜZENLENDİ) ---
   void _showLegalContent(String slug, String title) async {
     showDialog(
       context: context,
@@ -111,16 +156,26 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
 
     try {
-      // ApiConstants üzerinden merkezi adres kullanımı
       final response = await http.get(Uri.parse(ApiConstants.contracts(slug)));
       if (mounted) Navigator.pop(context);
 
       if (response.statusCode == 200) {
-        _showLegalBottomSheet(title, utf8.decode(response.bodyBytes));
+        String content = utf8.decode(response.bodyBytes);
+
+        // --- KRİTİK DÜZELTME ---
+        // Register ekranındaki gibi temizlik yapıyoruz
+        content = content
+            .replaceAll(r'\r\n', '\n') // Windows satır sonları
+            .replaceAll(r'\n', '\n')   // Normal satır sonları
+            .replaceAll('"', '');      // JSON tırnakları
+
+        _showLegalBottomSheet(title, content);
+      } else {
+        _showSnackBar("İçerik bulunamadı.", Colors.orange);
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showSnackBar("Metin yüklenemedi.", Colors.red);
+      _showSnackBar("Bağlantı hatası.", Colors.red);
     }
   }
 
@@ -128,7 +183,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   Future<void> _closeAd(int adId) async {
     try {
-      final response = await http.delete(Uri.parse('${ApiConstants.baseUrl}/delete-request/$adId/'));
+      // ApiConstants.deleteRequest fonksiyonunu kullandık
+      final response = await http.delete(Uri.parse(ApiConstants.deleteRequest(adId)));
       if (response.statusCode == 200) {
         if (mounted) {
           Navigator.pop(context);
@@ -142,7 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   Future<void> _approveDonor(int donationId) async {
     try {
       final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/approve-donation/'),
+        Uri.parse(ApiConstants.approveDonation),
         body: {'donation_id': donationId.toString()},
       );
       if (response.statusCode == 200) {
@@ -150,7 +206,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         if (mounted) {
           Navigator.pop(context);
           _showSnackBar(data['message'] ?? "Bağış onaylandı!", Colors.green);
-          _refreshUserDataFromApi();
+          _refreshUserDataFromApi(); // Puan güncellensin diye
           _fetchMyAds();
         }
       }
@@ -160,7 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   Future<void> _deleteAccountRequest() async {
     try {
       final response = await http.delete(
-        Uri.parse('${ApiConstants.baseUrl}/delete-account/'),
+        Uri.parse(ApiConstants.deleteAccount),
         body: {'phone': userPhone},
       );
       if (response.statusCode == 200) {
@@ -177,12 +233,155 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     } catch (e) { _showSnackBar("Hesap silinemedi.", Colors.red); }
   }
 
-  // --- ARAYÜZ YARDIMCILARI ---
+  // --- ARAYÜZ ---
+
+  @override
+  Widget build(BuildContext context) {
+    UserLevel levelInfo = GamificationHelper.getLevelInfo(userPoints);
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white, elevation: 0,
+        title: const Text("Profilim", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.black),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadLocalData()),
+          )
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildProfileHeader(levelInfo),
+            TabBar(
+              controller: _tabController,
+              labelColor: const Color(0xFFD32F2F), unselectedLabelColor: Colors.grey, indicatorColor: const Color(0xFFD32F2F),
+              tabs: const [Tab(text: "İlanlarım"), Tab(text: "Bağışlarım")],
+            ),
+            SizedBox(
+              height: 380,
+              child: TabBarView(
+                controller: _tabController,
+                children: [_buildAdsTab(), _buildDonationsTab()],
+              ),
+            ),
+            const Divider(),
+            _buildLegalAndAccountSection(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileHeader(UserLevel levelInfo) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          // Profil Resmi Alanı (Tıklanabilir)
+          GestureDetector(
+            onTap: _pickAndSaveImage, // Tıklayınca galeri açılır
+            child: Stack(
+              children: [
+                CircleAvatar(
+                  radius: 45,
+                  backgroundColor: Colors.grey[200],
+                  backgroundImage: _profileImage != null
+                      ? FileImage(_profileImage!)
+                      : null,
+                  child: _profileImage == null
+                      ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+                Row(children: [Text(levelInfo.badge, style: const TextStyle(fontSize: 28)), const SizedBox(width: 8), Text(levelInfo.title, style: TextStyle(color: levelInfo.color, fontWeight: FontWeight.bold))]),
+                const SizedBox(height: 5),
+                LinearProgressIndicator(value: levelInfo.progress, backgroundColor: Colors.grey[200], valueColor: AlwaysStoppedAnimation<Color>(levelInfo.color)),
+                Text("$userPoints Puan", style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // --- TAB İÇERİKLERİ ---
+
+  Widget _buildAdsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        if (activeAds.isNotEmpty) ...[
+          const Text("AKTİF İLANLAR", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
+          ...activeAds.map((ad) => _buildAdCard(ad, true)).toList(),
+        ],
+        if (pastAds.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const Text("GEÇMİŞ İLANLAR", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
+          ...pastAds.map((ad) => _buildAdCard(ad, false)).toList(),
+        ],
+        if (activeAds.isEmpty && pastAds.isEmpty) const Center(child: Padding(padding: EdgeInsets.only(top: 20), child: Text("İlan bulunamadı."))),
+      ],
+    );
+  }
+
+  Widget _buildDonationsTab() {
+    if (myDonations.isEmpty) return const Center(child: Text("Bağış kaydı bulunamadı."));
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: myDonations.length,
+      itemBuilder: (context, index) {
+        final d = myDonations[index];
+        return Card(
+          child: ListTile(
+            leading: Icon(Icons.favorite, color: d['status_code'] == 'approved' ? Colors.green : Colors.orange),
+            title: Text(d['hospital']),
+            subtitle: Text(d['date']),
+            trailing: Text(d['status']),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAdCard(dynamic ad, bool isActive) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: ListTile(
+        onTap: isActive ? () => _showAdManagementSheet(ad) : null,
+        leading: CircleAvatar(backgroundColor: isActive ? const Color(0xFFD32F2F) : Colors.grey, child: Text(ad['blood_type'], style: const TextStyle(color: Colors.white, fontSize: 12))),
+        title: Text(ad['hospital'], style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text("${ad['city']} / ${ad['district']}"),
+        trailing: isActive ? const Icon(Icons.settings, size: 20) : null,
+      ),
+    );
+  }
+
+  // --- DİĞER YARDIMCILAR ---
 
   void _showAdManagementSheet(dynamic ad) async {
     List<dynamic> donors = [];
     try {
-      final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/request-donors/${ad['id']}/'));
+      final response = await http.get(Uri.parse(ApiConstants.requestDonors(ad['id'])));
       if (response.statusCode == 200) {
         donors = json.decode(utf8.decode(response.bodyBytes));
       }
@@ -241,6 +440,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
+  // --- SÖZLEŞME GÖSTERİMİ (DÜZENLENDİ) ---
   void _showLegalBottomSheet(String title, String content) {
     showModalBottomSheet(
       context: context,
@@ -253,7 +453,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           children: [
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Divider(height: 30),
-            Expanded(child: SingleChildScrollView(child: Text(content, style: const TextStyle(height: 1.5)))),
+
+            // Text widget'ı yerine Markdown kullanıyoruz
+            Expanded(
+              child: Markdown(
+                data: content,
+                styleSheet: MarkdownStyleSheet(
+                  h1: const TextStyle(color: Color(0xFFD32F2F), fontSize: 20, fontWeight: FontWeight.bold),
+                  p: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.5),
+                  strong: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+
             const SizedBox(height: 15),
             SizedBox(
               width: double.infinity,
@@ -265,119 +478,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             )
           ],
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    UserLevel levelInfo = GamificationHelper.getLevelInfo(userPoints);
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white, elevation: 0,
-        title: const Text("Profilim", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.black),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadLocalData()),
-          )
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildProfileHeader(levelInfo),
-            TabBar(
-              controller: _tabController,
-              labelColor: const Color(0xFFD32F2F), unselectedLabelColor: Colors.grey, indicatorColor: const Color(0xFFD32F2F),
-              tabs: const [Tab(text: "İlanlarım"), Tab(text: "Bağışlarım")],
-            ),
-            SizedBox(
-              height: 380,
-              child: TabBarView(
-                controller: _tabController,
-                children: [_buildAdsTab(), _buildDonationsTab()],
-              ),
-            ),
-            const Divider(),
-            _buildLegalAndAccountSection(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileHeader(UserLevel levelInfo) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 45, backgroundColor: Colors.grey[200], backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
-                Row(children: [Text(levelInfo.badge, style: const TextStyle(fontSize: 28)), const SizedBox(width: 8), Text(levelInfo.title, style: TextStyle(color: levelInfo.color, fontWeight: FontWeight.bold))]),
-                const SizedBox(height: 5),
-                LinearProgressIndicator(value: levelInfo.progress, backgroundColor: Colors.grey[200], valueColor: AlwaysStoppedAnimation<Color>(levelInfo.color)),
-                Text("$userPoints Puan", style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdsTab() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        if (activeAds.isNotEmpty) ...[
-          const Text("AKTİF İLANLAR", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
-          ...activeAds.map((ad) => _buildAdCard(ad, true)).toList(),
-        ],
-        if (pastAds.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          const Text("GEÇMİŞ İLANLAR", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
-          ...pastAds.map((ad) => _buildAdCard(ad, false)).toList(),
-        ],
-        if (activeAds.isEmpty && pastAds.isEmpty) const Center(child: Padding(padding: EdgeInsets.only(top: 20), child: Text("İlan bulunamadı."))),
-      ],
-    );
-  }
-
-  Widget _buildDonationsTab() {
-    if (myDonations.isEmpty) return const Center(child: Text("Bağış kaydı bulunamadı."));
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: myDonations.length,
-      itemBuilder: (context, index) {
-        final d = myDonations[index];
-        return Card(
-          child: ListTile(
-            leading: Icon(Icons.favorite, color: d['status_code'] == 'approved' ? Colors.green : Colors.orange),
-            title: Text(d['hospital']),
-            subtitle: Text(d['date']),
-            trailing: Text(d['status']),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAdCard(dynamic ad, bool isActive) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: ListTile(
-        onTap: isActive ? () => _showAdManagementSheet(ad) : null,
-        leading: CircleAvatar(backgroundColor: isActive ? const Color(0xFFD32F2F) : Colors.grey, child: Text(ad['blood_type'], style: const TextStyle(color: Colors.white, fontSize: 12))),
-        title: Text(ad['hospital'], style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text("${ad['city']} / ${ad['district']}"),
-        trailing: isActive ? const Icon(Icons.settings, size: 20) : null,
       ),
     );
   }

@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../utils/constants.dart'; // İstediğin üzere dosya adı constants.dart olarak güncellendi
+import 'package:flutter_markdown/flutter_markdown.dart'; // EKLENDİ: Metinleri düzeltmek için
+import '../utils/constants.dart';
 import 'otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -55,7 +56,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     try {
-      // ApiConstants.contracts kullanımı constants.dart dosyasından gelir
       final response = await http.get(Uri.parse(ApiConstants.contracts(slug)));
 
       if (!mounted) return;
@@ -63,7 +63,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (response.statusCode == 200) {
         String content = utf8.decode(response.bodyBytes);
-        content = content.replaceAll('"', ''); // Backend json tırnaklarını temizle
+
+        // --- KRİTİK DÜZELTME ---
+        // Backend'den gelen metni temizliyoruz.
+        // Tırnak işaretlerini kaldır, \r\n karakterlerini gerçek satıra çevir.
+        content = content
+            .replaceAll(r'\r\n', '\n') // Windows tarzı yeni satırları düzelt
+            .replaceAll(r'\n', '\n')   // Normal yeni satırları düzelt
+            .replaceAll('"', '');      // JSON tırnaklarını temizle
+
         _showLegalBottomSheet(title, content);
       } else {
         _showSnackBar("Metin şu an yüklenemedi.", Colors.orange);
@@ -86,7 +94,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Otomatik FCM Token Alımı
       String? fcmToken;
       try {
         fcmToken = await FirebaseMessaging.instance.getToken();
@@ -94,7 +101,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         debugPrint("Token Hatası: $e");
       }
 
-      // 2. Kayıt Verilerini Hazırla
       final Map<String, dynamic> registerData = {
         'first_name': _nameController.text.trim(),
         'last_name': _surnameController.text.trim(),
@@ -106,7 +112,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'fcm_token': fcmToken,
       };
 
-      // 3. Backend İsteği (ApiConstants.register kullanılır)
       final response = await http.post(
         Uri.parse(ApiConstants.register),
         headers: {'Content-Type': 'application/json'},
@@ -145,13 +150,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  // --- SÖZLEŞME GÖSTERİMİ (DÜZELTİLEN YER) ---
   void _showLegalBottomSheet(String title, String content) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
+        height: MediaQuery.of(context).size.height * 0.85, // Biraz daha yükselttim
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
@@ -163,12 +169,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 20),
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFD32F2F))),
             const Divider(height: 30),
+
+            // Text yerine Markdown kullanıyoruz
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Text(content, style: const TextStyle(height: 1.6, fontSize: 14, color: Colors.black87)),
+              child: Markdown(
+                data: content,
+                styleSheet: MarkdownStyleSheet(
+                  h1: const TextStyle(color: Color(0xFFD32F2F), fontSize: 20, fontWeight: FontWeight.bold),
+                  h2: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold),
+                  p: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.5),
+                  strong: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                padding: EdgeInsets.zero,
               ),
             ),
+
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,

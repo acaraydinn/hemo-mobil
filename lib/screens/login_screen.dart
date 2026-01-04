@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io'; // iOS/Android ayrımı için gerekli (BUNU SAKIN SİLME)
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,43 +28,75 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- GİRİŞ FONKSİYONU ---
+  // --- GÜNCELLENMİŞ GİRİŞ FONKSİYONU ---
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. Cihazın güncel FCM Token'ını al (Otomatik Bildirim Kaydı İçin)
-      String? fcmToken;
-      try {
-        fcmToken = await FirebaseMessaging.instance.getToken();
-        debugPrint("Giriş anında yakalanan Token: $fcmToken");
-      } catch (e) {
-        debugPrint("Token alınamadı (iOS Simülatörü veya izin hatası): $e");
+      // 1. İZİN VE TOKEN İŞLEMLERİ
+      // iOS'ta izin istemezsen token gelse bile backend'e gitmeyebilir, garantiye alıyoruz.
+      if (Platform.isIOS) {
+        NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        debugPrint('iOS Bildirim İzni Durumu: ${settings.authorizationStatus}');
       }
 
-      // 2. Login isteğini gönder
+      String? fcmToken;
+      try {
+        // iOS ise APNS token var mı kontrol et (Debug için önemli)
+        if (Platform.isIOS) {
+          String? apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+          debugPrint("DEBUG: iOS APNS Token durumu: ${apnsToken != null ? 'VAR' : 'YOK'}");
+        }
+        // Hem Android hem iOS için FCM Token al
+        fcmToken = await FirebaseMessaging.instance.getToken();
+        debugPrint("DEBUG: Gönderilecek Token: $fcmToken");
+      } catch (e) {
+        debugPrint("Token Hatası: $e");
+      }
+
+      // 2. LOGİN İSTEĞİ (KRİTİK BÖLÜM - BURASI DEĞİŞTİ)
+      // Backend'in ne beklediğini garantiye almak için hem 'fcm_token' hem 'registration_id' gönderiyoruz.
+      // Ayrıca 'device_type' ile iOS olduğunu ZORLA belirtiyoruz.
+
+      final Map<String, dynamic> bodyData = {
+        'phone': _phoneController.text.trim(),
+        'password': _passwordController.text,
+        // Django genellikle 'registration_id' bekler, senin backend 'fcm_token' bekliyor olabilir.
+        // İkisini de gönderiyoruz ki kaçarı olmasın.
+        'fcm_token': fcmToken,
+        'registration_id': fcmToken,
+        'device_type': Platform.isIOS ? 'ios' : 'android', // İŞTE ÇÖZÜM BU SATIRDA
+        'active': true,
+      };
+
+      debugPrint("DEBUG: Server'a giden body: $bodyData");
+
       final response = await http.post(
         Uri.parse(ApiConstants.login),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone': _phoneController.text.trim(),
-          'password': _passwordController.text,
-          'fcm_token': fcmToken, // Backend modeline token'ı otomatik gönderiyoruz
-        }),
+        body: jsonEncode(bodyData),
       );
+
+      debugPrint("DEBUG: Server Yanıt Kodu: ${response.statusCode}");
+      // Hata varsa body'yi görelim
+      if(response.statusCode != 200) {
+        debugPrint("DEBUG: Server Hata Detayı: ${response.body}");
+      }
 
       if (response.statusCode == 200) {
         // Türkçe karakter sorunu olmaması için utf8.decode
         final decodedData = jsonDecode(utf8.decode(response.bodyBytes));
 
-        // 3. Kullanıcı bilgilerini SharedPreferences'a kaydet
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', true);
         await prefs.setString('userPhone', decodedData['phone'] ?? "");
 
-        // RegisterScreen ile uyumlu olması için isim birleştirme
         String fullName = "${decodedData['first_name'] ?? ""} ${decodedData['last_name'] ?? ""}";
         await prefs.setString('userName', fullName.trim());
 
@@ -75,10 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Hoş geldiniz, Giriş Başarılı!'),
-              backgroundColor: Colors.green,
-            ),
+            const SnackBar(content: Text('Giriş Başarılı!'), backgroundColor: Colors.green),
           );
           Navigator.pushReplacement(
             context,
@@ -88,12 +118,13 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         if (mounted) {
           final errorData = jsonDecode(utf8.decode(response.bodyBytes));
-          _showErrorSnackBar(errorData['error'] ?? 'Telefon numarası veya şifre hatalı.');
+          _showErrorSnackBar(errorData['error'] ?? 'Giriş başarısız oldu.');
         }
       }
     } catch (e) {
+      debugPrint("Kritik Hata: $e");
       if (mounted) {
-        _showErrorSnackBar('Bağlantı Hatası: Django sunucusu kapalı veya erişilemez durumda.');
+        _showErrorSnackBar('Sunucu hatası veya bağlantı yok.');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
