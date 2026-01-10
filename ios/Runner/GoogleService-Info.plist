@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyDajL0Hh1rAOBadL0JhNuJsL_UWEtOAXkU</string>
+	<string>AIzaSyCVtsR6KCP4_SjG1k-erPJoIXnELCHA_I4</string>
 	<key>GCM_SENDER_ID</key>
-	<string>346901646140</string>
+	<string>454688541244</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>tr.com.hemo.hemoApp.ios</string>
+	<string>com.hemo.hemoApp</string>
 	<key>PROJECT_ID</key>
-	<string>hemo-ubasoft</string>
+	<string>hemo-ubas</string>
 	<key>STORAGE_BUCKET</key>
-	<string>hemo-ubasoft.firebasestorage.app</string>
+	<string>hemo-ubas.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:346901646140:ios:bc1aacf93e90dd92a9ac39</string>
+	<string>1:454688541244:ios:badbe834778d3ba8b31139</string>
 </dict>
 </plist>

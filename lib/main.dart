@@ -3,20 +3,15 @@ import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-// 👇 BU SATIR ÇOK ÖNEMLİ: Oluşturduğumuz ayar dosyasını dahil ediyoruz
-import 'firebase_options.dart';
 
 void main() async {
   // 1. Flutter motorunu hazırla
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // 2. Firebase'i "firebase_options.dart" içindeki ayarlarla başlat
-    // Bu sayede iOS için ekstra plist dosyası aramasına gerek kalmaz.
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    debugPrint("--- [SİSTEM] FIREBASE BAŞARIYLA BAŞLATILDI (Options ile) ---");
+    // 2. Firebase'i başlat (GoogleService-Info.plist ve google-services.json dosyalarını otomatik kullanır)
+    await Firebase.initializeApp();
+    debugPrint("--- [SİSTEM] FIREBASE BAŞARIYLA BAŞLATILDI ---");
 
     // 3. Bildirim kurulumunu yap ve token alımını bekle
     await _setupFirebaseMessaging();

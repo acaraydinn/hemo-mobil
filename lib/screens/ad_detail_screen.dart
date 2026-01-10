@@ -39,7 +39,8 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   // Kullanıcı ve İlan Sahibi Kontrolü
   Future<void> _checkOwnershipAndData() async {
     final prefs = await SharedPreferences.getInstance();
-    currentUserPhone = prefs.getString('userPhone');
+    // 🔥 BUG FIX: 'userPhone' yerine 'phone' kullanılmalı
+    currentUserPhone = prefs.getString('phone');
 
     if (mounted) {
       setState(() {
@@ -115,6 +116,131 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
     }
   }
 
+  // --- 🔥 ENGELLEME VE ŞİKAYET FONKSİYONLARI ---
+
+  Future<void> _blockUser(int blockedUserId, String blockedUserName) async {
+    if (currentUserPhone == null || currentUserPhone!.isEmpty) {
+      _showSnackBar("Lütfen önce giriş yapın.", Colors.orange);
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConstants.blockUser),
+        body: {
+          'blocker_phone': currentUserPhone,
+          'blocked_user_id': blockedUserId.toString(),
+        },
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          _showSnackBar("$blockedUserName engellendi. İlanlarını artık görmeyeceksiniz.", Colors.black);
+          Navigator.pop(context); // Detay ekranından çık
+        }
+      } else {
+        _showSnackBar("Engelleme işlemi başarısız oldu.", Colors.red);
+      }
+    } catch (e) {
+      _showSnackBar("Bağlantı hatası!", Colors.red);
+    }
+  }
+
+  Future<void> _reportContent(int requestId, String reason) async {
+    if (currentUserPhone == null || currentUserPhone!.isEmpty) {
+      _showSnackBar("Lütfen önce giriş yapın.", Colors.orange);
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConstants.reportContent),
+        body: {
+          'reporter_phone': currentUserPhone,
+          'blood_request_id': requestId.toString(),
+          'reason': reason,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          _showSnackBar("Şikayetiniz alındı. 24 saat içinde incelenecektir.", Colors.green);
+        }
+      } else {
+        _showSnackBar("Şikayet gönderilemedi.", Colors.red);
+      }
+    } catch (e) {
+      _showSnackBar("Bağlantı hatası!", Colors.red);
+    }
+  }
+
+  void _showBlockDialog(int blockedUserId, String name) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("Kullanıcıyı Engelle"),
+          content: Text("$name adlı kullanıcıyı engellemek istiyor musunuz? İlanlarını bir daha görmeyeceksiniz."),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Vazgeç")),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _blockUser(blockedUserId, name);
+              },
+              child: const Text("ENGELLE", style: TextStyle(color: Colors.white)),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  void _showReportDialog() {
+    String selectedReason = "Uygunsuz İçerik";
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text("İlanı Şikayet Et"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("Lütfen şikayet nedeninizi seçin:"),
+                  const SizedBox(height: 10),
+                  DropdownButton<String>(
+                    value: selectedReason,
+                    isExpanded: true,
+                    items: ["Uygunsuz İçerik", "Dolandırıcılık", "Hakaret / Küfür", "Yanlış Bilgi"]
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() => selectedReason = val!);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD32F2F)),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _reportContent(widget.ad['id'], selectedReason);
+                  },
+                  child: const Text("GÖNDER", style: TextStyle(color: Colors.white)),
+                )
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ... (Geri kalan UI fonksiyonları: _makePhoneCall, _shareAdImage, _getProductName, _buildPoster aynı kalıyor ancak ApiConstants entegrasyonu tamamlandı) ...
 
   void _showSnackBar(String msg, Color color) {
@@ -164,6 +290,30 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       appBar: AppBar(
         title: const Text("İlan Detayı", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
         backgroundColor: Colors.grey[50], foregroundColor: Colors.black, elevation: 0, centerTitle: true,
+        actions: isMyAd ? [] : [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.grey),
+            onSelected: (value) {
+              if (value == 'sikayet') {
+                _showReportDialog();
+              } else if (value == 'engelle') {
+                String userName = "${widget.ad['first_name'] ?? ''} ${widget.ad['last_name'] ?? ''}".trim();
+                if (userName.isEmpty) userName = "Bu kullanıcı";
+                _showBlockDialog(widget.ad['user_id'], userName);
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'sikayet',
+                child: Row(children: [Icon(Icons.flag, color: Colors.red, size: 20), SizedBox(width: 10), Text('İlanı Şikayet Et')]),
+              ),
+              const PopupMenuItem<String>(
+                value: 'engelle',
+                child: Row(children: [Icon(Icons.block, color: Colors.black, size: 20), SizedBox(width: 10), Text('Kullanıcıyı Engelle')]),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Stack(
         children: [

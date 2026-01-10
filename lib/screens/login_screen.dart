@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:io'; // iOS/Android ayrımı için gerekli (BUNU SAKIN SİLME)
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../utils/constants.dart'; // Merkezi sabitler yapısı
+import '../utils/constants.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
 
@@ -28,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- GÜNCELLENMİŞ GİRİŞ FONKSİYONU ---
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -36,46 +35,30 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       // 1. İZİN VE TOKEN İŞLEMLERİ
-      // iOS'ta izin istemezsen token gelse bile backend'e gitmeyebilir, garantiye alıyoruz.
       if (Platform.isIOS) {
-        NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+        await FirebaseMessaging.instance.requestPermission(
           alert: true,
           badge: true,
           sound: true,
         );
-        debugPrint('iOS Bildirim İzni Durumu: ${settings.authorizationStatus}');
       }
 
       String? fcmToken;
       try {
-        // iOS ise APNS token var mı kontrol et (Debug için önemli)
-        if (Platform.isIOS) {
-          String? apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-          debugPrint("DEBUG: iOS APNS Token durumu: ${apnsToken != null ? 'VAR' : 'YOK'}");
-        }
-        // Hem Android hem iOS için FCM Token al
         fcmToken = await FirebaseMessaging.instance.getToken();
-        debugPrint("DEBUG: Gönderilecek Token: $fcmToken");
       } catch (e) {
         debugPrint("Token Hatası: $e");
       }
 
-      // 2. LOGİN İSTEĞİ (KRİTİK BÖLÜM - BURASI DEĞİŞTİ)
-      // Backend'in ne beklediğini garantiye almak için hem 'fcm_token' hem 'registration_id' gönderiyoruz.
-      // Ayrıca 'device_type' ile iOS olduğunu ZORLA belirtiyoruz.
-
+      // 2. LOGİN İSTEĞİ
       final Map<String, dynamic> bodyData = {
         'phone': _phoneController.text.trim(),
         'password': _passwordController.text,
-        // Django genellikle 'registration_id' bekler, senin backend 'fcm_token' bekliyor olabilir.
-        // İkisini de gönderiyoruz ki kaçarı olmasın.
         'fcm_token': fcmToken,
         'registration_id': fcmToken,
-        'device_type': Platform.isIOS ? 'ios' : 'android', // İŞTE ÇÖZÜM BU SATIRDA
+        'device_type': Platform.isIOS ? 'ios' : 'android',
         'active': true,
       };
-
-      debugPrint("DEBUG: Server'a giden body: $bodyData");
 
       final response = await http.post(
         Uri.parse(ApiConstants.login),
@@ -83,27 +66,21 @@ class _LoginScreenState extends State<LoginScreen> {
         body: jsonEncode(bodyData),
       );
 
-      debugPrint("DEBUG: Server Yanıt Kodu: ${response.statusCode}");
-      // Hata varsa body'yi görelim
-      if(response.statusCode != 200) {
-        debugPrint("DEBUG: Server Hata Detayı: ${response.body}");
-      }
-
       if (response.statusCode == 200) {
-        // Türkçe karakter sorunu olmaması için utf8.decode
         final decodedData = jsonDecode(utf8.decode(response.bodyBytes));
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', true);
-        await prefs.setString('userPhone', decodedData['phone'] ?? "");
+
+        // --- 🔥 DÜZELTİLEN KISIM: Anahtar 'phone' olarak sabitlendi ---
+        // Backend'den dönen numarayı veya kullanıcının girdiğini kaydediyoruz
+        await prefs.setString('phone', decodedData['phone'] ?? _phoneController.text.trim());
 
         String fullName = "${decodedData['first_name'] ?? ""} ${decodedData['last_name'] ?? ""}";
         await prefs.setString('userName', fullName.trim());
-
         await prefs.setInt('userPoints', decodedData['points'] ?? 0);
         await prefs.setString('userBadge', decodedData['badge'] ?? 'Gönüllü');
 
-        // Token'ı yerel hafızada da tutalım
         if (fcmToken != null) await prefs.setString('fcmToken', fcmToken);
 
         if (mounted) {
@@ -151,7 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Marka Logosu
                   const Icon(Icons.bloodtype, size: 90, color: Color(0xFFD32F2F)),
                   const SizedBox(height: 10),
                   const Text(
@@ -166,7 +142,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 50),
 
-                  // Telefon Input
                   TextFormField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
@@ -176,7 +151,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Şifre Input
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
@@ -185,7 +159,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 30),
 
-                  // Giriş Butonu
                   SizedBox(
                     height: 55,
                     child: ElevatedButton(
@@ -203,7 +176,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 25),
 
-                  // Kayıt Ol Linki
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

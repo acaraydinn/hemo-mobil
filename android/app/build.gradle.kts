@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "tr.com.hemo.hemo_app"
+    namespace = "com.hemo.hemoApp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -26,7 +26,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "tr.com.hemo.hemo_app"
+        applicationId = "com.hemo.hemoApp"
 
         // MultiDex desteği büyük kütüphaneler (Firebase gibi) için şarttır
         multiDexEnabled = true

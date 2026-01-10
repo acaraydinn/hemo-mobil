@@ -1,4 +1,4 @@
-package tr.com.hemo.hemo_app
+package com.hemo.hemoApp
 
 import io.flutter.embedding.android.FlutterActivity
 

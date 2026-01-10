@@ -3,11 +3,13 @@ class ApiConstants {
   // 🌍 PRODUCTION (CANLI) SUNUCU AYARLARI
   // =============================================================
 
-  // Backend domain adresi (SSL/HTTPS aktif)
-  static const String _domain = "https://hemo.socialrate.net";
+  // NOT: Backend'i yerelde (kendi bilgisayarında) çalıştırıyorsan ve
+  // emülatör kullanıyorsan burayı "http://10.0.2.2:8000" yapmalısın.
+  // Gerçek cihazla test ediyorsan bilgisayarının IP adresini yaz (örn: 192.168.1.35:8000)
+  // Canlı sunucuya attıysan domain kalabilir.
+  static const String _domain = "https://hemo.com.tr"; // 🔥 PRODUCTION
 
   // Django urls.py dosyasındaki 'api/' path'i buraya eklendi.
-  // Sonuç: https://hemo.socialrate.net/api
   static const String baseUrl = "$_domain/api";
 
   // =============================================================
@@ -31,6 +33,12 @@ class ApiConstants {
   static const String donate = "$baseUrl/donate/";
   static const String myDonations = "$baseUrl/my-donations/";
   static const String approveDonation = "$baseUrl/approve-donation/";
+
+  // =============================================================
+  // 🛡️ GÜVENLİK VE MODERASYON (YENİ - APPLE İÇİN ŞART)
+  // =============================================================
+  static const String blockUser = "$baseUrl/block-user/";
+  static const String reportContent = "$baseUrl/report-content/";
 
   // =============================================================
   // ⚡ DİNAMİK PARAMETRELİ UÇ NOKTALAR (Fonksiyon Olarak Kalmalı)

@@ -43,7 +43,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   Future<void> _loadLocalData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      userPhone = prefs.getString('userPhone') ?? "";
+      // 🔥 BUG FIX: 'userPhone' yerine 'phone' kullanılmalı (login'de 'phone' ile kaydediliyor)
+      userPhone = prefs.getString('phone') ?? "";
       userName = prefs.getString('userName') ?? "Kullanıcı";
 
       // Kaydedilmiş resim yolunu kontrol et
